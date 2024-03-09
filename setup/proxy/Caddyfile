@@ -1,0 +1,16 @@
+:80 {
+	log {
+	output stderr
+	format console
+	}
+
+	@websockets {
+		header Connection *Upgrade*
+		header Upgrade    websocket
+	}
+	reverse_proxy /ws/* @websockets client:5001
+	
+	reverse_proxy client:5000
+	reverse_proxy /api/* server:6000
+	reverse_proxy /services/* services:7000
+}
