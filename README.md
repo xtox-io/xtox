@@ -2,6 +2,12 @@
 
 Let's develop together.
 
+> <p>Subscribe to see development of a scalable platform using <a href="https://go.dev">Go</a>
+
+<a href="https://polar.sh/xtox-io"><picture><source media="(prefers-color-scheme: dark)" srcset="https://polar.sh/embed/subscribe.svg?org=xtox-io&label=Subscribe&darkmode"><img alt="Subscribe on Polar" src="https://polar.sh/embed/subscribe.svg?org=xtox-io&label=Subscribe"></picture></a>
+</p>
+ 
+
 ## setup
 
 please install the following tools
