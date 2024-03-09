@@ -18,7 +18,7 @@ general structure and architecture
 - [server](./server/README.md)      : responsible for `backend`
 - [services](./services/README.md)  : responsible for `lambda`
 
-![](./README.svg)
+![](./README.png)
 
 ## development
 please run below to open project in [vscode](https://code.visualstudio.com/)
