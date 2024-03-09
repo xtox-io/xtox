@@ -1,0 +1,234 @@
+version: "3.9"
+# ----------------------
+# services
+# ----------------------
+services:
+  # -------------------- client (golang)
+  xtox-client:
+    container_name: xtox-client
+    build:
+      dockerfile: Dockerfile
+      context: ./client
+    environment:
+      - ENVIRONMENT=dev
+    command:
+      - "serve"
+      - "-c"
+      - "/client/config.toml"
+    volumes:
+      - type: bind
+        source: ./setup/client
+        target: /client
+        read_only: true
+    ports:
+      - "5000:5000" # http
+      - "5001:5001" # websocket
+    networks:
+      - xtox-network
+    healthcheck:
+      test:
+        ["CMD", "/usr/bin/curl", "-s", "--fail", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    user: "10000:10000"
+    develop:
+      watch:
+        - action: rebuild
+          files:
+            - ./**/*.go
+            - ./go.mod
+            - ./go.sum
+    depends_on:
+      - xtox-server
+      - xtox-services
+
+  # -------------------- server (golang)
+  xtox-server:
+    container_name: xtox-server
+    build:
+      dockerfile: Dockerfile
+      context: ./server
+    environment:
+      - ENVIRONMENT=dev
+    command:
+      - "serve"
+      - "-c"
+      - "/server/config.toml"
+    volumes:
+      - type: bind
+        source: ./setup/server
+        target: /server
+        read_only: true
+    ports:
+      - "6000:6000" # http
+    networks:
+      - xtox-network
+    healthcheck:
+      test:
+        ["CMD", "/usr/bin/curl", "-s", "--fail", "http://localhost:6000/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    user: "10000:10000"
+    develop:
+      watch:
+        - action: rebuild
+          files:
+            - ./**/*.go
+            - ./go.mod
+            - ./go.sum
+    depends_on:
+      - xtox-db
+      - xtox-cache
+      - xtox-stream
+
+  # -------------------- services (golang)
+  xtox-services:
+    container_name: xtox-services
+    build:
+      dockerfile: Dockerfile
+      context: ./services
+    environment:
+      - ENVIRONMENT=dev
+    command:
+      - "serve"
+      - "-c"
+      - "/services/config.toml"
+    volumes:
+      - type: bind
+        source: ./setup/services
+        target: /services
+        read_only: true
+    ports:
+      - "7000:7001" # http
+    networks:
+      - xtox-network
+    healthcheck:
+      test:
+        ["CMD", "/usr/bin/curl", "-s", "--fail", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    user: "10000:10000"
+    develop:
+      watch:
+        - action: rebuild
+          files:
+            - ./**/*.go
+            - ./go.mod
+            - ./go.sum
+    depends_on:
+      - xtox-db
+      - xtox-cache
+      - xtox-stream
+
+  # -------------------- proxy (envoy)
+  xtox-proxy:
+    container_name: xtox-proxy
+    image: caddy:2.7.6
+    volumes:
+      - ./setup/proxy/Caddyfile:/etc/caddy/Caddyfile
+    ports:
+      - "80:80"
+    networks:
+      - xtox-network
+
+  # -------------------- database (cockroachdb)
+  xtox-db:
+    container_name: xtox-db
+    image: cockroachdb/cockroach:v23.2.2
+    volumes:
+      - db-data:/cockroach/cockroach-data
+    command: "start-single-node --insecure"
+    networks:
+      - xtox-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health?ready=1"]
+      interval: "10s"
+      timeout: "30s"
+      retries: 5
+      start_period: "20s"
+    ports:
+      - "9080:8080"
+      - "26257:26257"
+    restart: always
+
+  # -------------------- cache (redis)
+  xtox-cache:
+    container_name: xtox-cache
+    image: redis:7.2.4
+    volumes:
+      - cache-data:/data
+    networks:
+      - xtox-network
+    ports:
+      - "6379:6379"
+    restart: always
+
+  # -------------------- stream (redpanda)
+  xtox-stream:
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://xtox-stream:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://xtox-stream:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr xtox-stream:33145
+      - --advertise-rpc-addr xtox-stream:33145
+      - --smp 1
+      - --memory 1G
+      - --mode dev-container
+      - --default-log-level=debug
+    image: docker.redpanda.com/redpandadata/redpanda:v23.3.6
+    container_name: xtox-stream
+    volumes:
+      - stream-data:/var/lib/redpanda/data
+    networks:
+      - xtox-network
+    ports:
+      - "18081:18081"
+      - "18082:18082"
+      - "19092:19092"
+      - "19644:9644"
+
+  xtox-console:
+    container_name: xtox-console
+    image: docker.redpanda.com/redpandadata/console:v2.4.3
+    networks:
+      - xtox-network
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["xtox-stream:9092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://xtox-stream:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://xtox-stream:9644"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - xtox-stream
+
+# ----------------------
+# volumes
+# ----------------------
+volumes:
+  db-data:
+  cache-data:
+  stream-data:
+
+# ----------------------
+# networks
+# ----------------------
+networks:
+  xtox-network:
+    driver: bridge
