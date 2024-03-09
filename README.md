@@ -54,10 +54,3 @@ make logs           # check docker logs
 
 > use `make start` or `make watch`
 > you can run `make logs` to see all logs you can run `docker ps -a && docker logs {id}` to see instance logs
-
-## support
-
-> <p> you can support and access private content using 
-
-<a href="https://polar.sh/xtox-io/subscriptions"><picture><source media="(prefers-color-scheme: dark)" srcset="https://polar.sh/embed/tiers.svg?org=xtox-io&darkmode"><img alt="Subscription Tiers on Polar" src="https://polar.sh/embed/tiers.svg?org=xtox-io"></picture></a>
-</p>
